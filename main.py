@@ -7,8 +7,8 @@ import os
 # 你的 PushPlus Token (从环境变量获取)
 PUSH_TOKEN = os.environ.get('PUSH_TOKEN') 
 
-# 目标 URL
-URL = "https://driverstest.noob.place/api/get_location_details"
+# [修正] 必须带上后面这串数字，否则会 404
+URL = "https://driverstest.noob.place/api/get_location_details8534567107532739672"
 
 # 目标考点 ID (Roselands = 421)
 TARGET_LOCATION_ID = "421"
@@ -42,23 +42,25 @@ def check_slots():
         # 1. 构造请求头
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
-            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Type": "application/x-www-form-urlencoded", # 对应 curl 的 header
             "Origin": "https://driverstest.noob.place",
             "Referer": "https://driverstest.noob.place/",
             "Accept": "application/json",
             "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7"
         }
         
-        # 2. 构造 Form Data
+        # 2. 构造 Form Data (对应 curl 的 --data-urlencode)
         payload = {
             "location_id": TARGET_LOCATION_ID,
-            "client_etag": ""
+            "client_etag": "" 
         }
 
+        # 使用 data=payload 发送 application/x-www-form-urlencoded 请求
         response = requests.post(URL, data=payload, headers=headers)
         
         if response.status_code != 200:
             print(f"请求失败，状态码: {response.status_code}")
+            print(f"响应内容: {response.text[:200]}...") # 打印部分错误内容方便调试
             return
 
         try:
@@ -67,7 +69,7 @@ def check_slots():
             print("返回内容不是 JSON，可能是服务器错误")
             return
 
-        # 3. 验证 Location ID
+        # 3. 验证 Location ID (有些API返回的是int，转str比较稳)
         if str(data.get("location")) != TARGET_LOCATION_ID:
             print(f"提示：API返回的 location ({data.get('location')}) 与预期不符，继续检查...")
 
@@ -75,7 +77,6 @@ def check_slots():
         available_slots = []
         slots_list = data.get('slots', [])
         
-        # 简单统计一下总共多少个 slot
         print(f"API 返回了 {len(slots_list)} 个时间段数据")
 
         for slot in slots_list:
@@ -83,11 +84,10 @@ def check_slots():
             if not time_str:
                 continue
 
-            # [逻辑修改] 第一步：先看是否有 True (不管日期)
+            # 只要 availability 是 True 就认为是有效考位
             if slot.get('availability') is True:
                 print(f"🔎 发现可用考位 (日期未验证): {time_str}")
                 
-                # 第二步：尝试解析日期
                 try:
                     # 解析日期格式: dd/mm/yyyy HH:MM
                     slot_time = datetime.strptime(time_str, "%d/%m/%Y %H:%M")
@@ -95,15 +95,13 @@ def check_slots():
                     print(f"   ❌ 日期格式解析错误: {time_str}")
                     continue
 
-                # 第三步：检查日期范围
-                # TODO: 忽略日期范围检查，测试wechat推送
+                # 检查日期范围
+                # TODO: send wechat first
                 # if START_DATE < slot_time <= END_DATE:
                     # print(f"   ✅ 日期符合要求 ({START_DATE.date()} - {END_DATE.date()})! 加入通知列表.")
                 available_slots.append(time_str)
                 # else:
                     # print(f"   ⚠️ 日期不在目标范围内，忽略.")
-            
-            # 如果 availability 是 false，就不打印了，避免日志刷屏
 
         # 5. 发送通知
         if available_slots:
