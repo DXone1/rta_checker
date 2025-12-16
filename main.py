@@ -75,7 +75,7 @@ def check_slots():
             slot_time_str = slot.get('startTime')
             if not slot_time_str:
                 continue
-                
+            print(f"检测到有slot: {slot_time_str}")
             try:
                 slot_time = datetime.strptime(slot_time_str, "%d/%m/%Y %H:%M")
             except ValueError:
