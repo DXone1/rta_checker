@@ -2,8 +2,8 @@ name: RTA Slot Checker
 
 on:
   schedule:
-    # 每 3 分钟运行一次 (GitHub 的 Cron 语法)
-    - cron: '*/3 * * * *'
+    # 每 5 分钟运行一次 (GitHub 的 Cron 语法)
+    - cron: '*/5 * * * *'
   # 允许你手动点击按钮触发（方便测试）
   workflow_dispatch:
 
