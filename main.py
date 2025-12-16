@@ -13,9 +13,9 @@ URL = "https://driverstest.noob.place/api/get_location_details853456710753273967
 # 目标考点 ID (Roselands = 421)
 TARGET_LOCATION_ID = "421"
 
-# 目标日期范围 (2026年1月5日之后 - 2026年1月15日及之前)
-START_DATE = datetime(2026, 1, 5) 
-END_DATE = datetime(2026, 1, 15)
+# 目标日期范围 (2026年1月5日及之后 - 2026年1月20日及之前)
+START_DATE = datetime(2026, 1, 4) 
+END_DATE = datetime(2026, 1, 20)
 
 def send_wechat_notification(content):
     """发送微信通知"""
@@ -96,19 +96,19 @@ def check_slots():
                     continue
 
                 # 检查日期范围
-                # TODO: send wechat first
-                # if START_DATE < slot_time <= END_DATE:
-                    # print(f"   ✅ 日期符合要求 ({START_DATE.date()} - {END_DATE.date()})! 加入通知列表.")
-                available_slots.append(time_str)
-                # else:
-                    # print(f"   ⚠️ 日期不在目标范围内，忽略.")
+                if START_DATE <= slot_time <= END_DATE:
+                    print(f"   ✅ 日期符合要求 ({START_DATE.date()} - {END_DATE.date()})! 加入通知列表.")
+                    available_slots.append(time_str)
+                else:
+                    print(f"   ⚠️ 日期不在目标范围内，忽略.")
 
         # 5. 发送通知
         if available_slots:
             count = len(available_slots)
             msg = (f"🎯 <b>Roselands 锁定 {count} 个考位！</b><br><br>" + 
                    "<br>".join(available_slots) + 
-                   "<br><br>👉 立即预约：https://driverstest.noob.place/")
+                   "<br><br>👉 立即预约：电话 132213" +
+                   "<br><br> booking id: 2965462510")
             print(f"成功筛选出 {count} 个目标考位，正在推送...")
             send_wechat_notification(msg)
         else:
