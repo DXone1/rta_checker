@@ -4,18 +4,18 @@ from datetime import datetime
 import os
 
 # --- 配置区域 ---
-# 你的 PushPlus Token (建议通过环境变量注入，不要直接写死在代码里)
+# 你的 PushPlus Token (从环境变量获取)
 PUSH_TOKEN = os.environ.get('PUSH_TOKEN') 
+
+# 目标 URL
+URL = "https://driverstest.noob.place/api/get_location_details"
 
 # 目标考点 ID (Roselands = 421)
 TARGET_LOCATION_ID = "421"
 
-# 目标 URL
-URL = "https://sbmkvp.github.io/rta_booking_information/results.json"
-
-# 目标日期范围
-START_DATE = datetime(2026, 1, 5) # 1月5日之后
-END_DATE = datetime(2026, 1, 15)  # 1月15日及之前
+# 目标日期范围 (2026年1月5日之后 - 2026年1月15日及之前)
+START_DATE = datetime(2026, 1, 5) 
+END_DATE = datetime(2026, 1, 15)
 
 def send_wechat_notification(content):
     """发送微信通知"""
@@ -26,7 +26,7 @@ def send_wechat_notification(content):
     url = "http://www.pushplus.plus/send"
     data = {
         "token": PUSH_TOKEN,
-        "title": "🎉 RTA Roselands 有考位啦！",
+        "title": "🎉 Roselands 发现目标考位！",
         "content": content,
         "template": "html"
     }
@@ -39,66 +39,82 @@ def send_wechat_notification(content):
 def check_slots():
     print(f"开始检查: {datetime.now()}")
     try:
-        # 1. 获取数据
-        # 添加 User-Agent 防止被简单的反爬虫拦截
+        # 1. 构造请求头
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Origin": "https://driverstest.noob.place",
+            "Referer": "https://driverstest.noob.place/",
+            "Accept": "application/json",
+            "Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7"
         }
-        response = requests.get(URL, headers=headers)
+        
+        # 2. 构造 Form Data
+        payload = {
+            "location_id": TARGET_LOCATION_ID,
+            "client_etag": ""
+        }
+
+        response = requests.post(URL, data=payload, headers=headers)
+        
         if response.status_code != 200:
             print(f"请求失败，状态码: {response.status_code}")
             return
 
-        data = response.json()
-
-        # 2. 找到 Roselands (ID 421) 的数据
-        roselands_data = None
-        for location in data:
-            if str(location.get('location')) == TARGET_LOCATION_ID:
-                roselands_data = location
-                break
-        
-        if not roselands_data:
-            print("未找到 Roselands 数据")
-            return
-
-        # 3. 筛选考位
-        available_slots = []
         try:
-            slots_list = roselands_data['result']['ajaxresult']['slots']['listTimeSlot']
-        except KeyError:
-            print("数据结构解析错误，可能是考位数据为空")
+            data = response.json()
+        except json.JSONDecodeError:
+            print("返回内容不是 JSON，可能是服务器错误")
             return
+
+        # 3. 验证 Location ID
+        if str(data.get("location")) != TARGET_LOCATION_ID:
+            print(f"提示：API返回的 location ({data.get('location')}) 与预期不符，继续检查...")
+
+        # 4. 筛选考位
+        available_slots = []
+        slots_list = data.get('slots', [])
+        
+        # 简单统计一下总共多少个 slot
+        print(f"API 返回了 {len(slots_list)} 个时间段数据")
 
         for slot in slots_list:
-            # 数据格式通常为 "dd/mm/yyyy HH:MM"
-            slot_time_str = slot.get('startTime')
-            if not slot_time_str:
-                continue
-            print(f"检测到有slot: {slot_time_str}")
-            try:
-                slot_time = datetime.strptime(slot_time_str, "%d/%m/%Y %H:%M")
-            except ValueError:
+            time_str = slot.get('startTime')
+            if not time_str:
                 continue
 
-            # 检查时间是否在 1月5日之后 且 1月15日之前
-            # 注意：startTime > START_DATE 会排除1月5日当天，符合你的"之后"要求
-            # slot_time <= END_DATE 包含1月15日
-            if START_DATE < slot_time <= END_DATE:
-                # 再次确认 availability 为 true (虽然有些系统可能把 false 也列出来)
-                # 你的json样本里有 "availability": false/true
-                # 如果你想即使是 false 也提醒（可能是缓存），可以去掉这个判断
-                # 这里假设只提醒 available 的
-                if slot.get('availability') is True or slot.get('slotNumber') is not None:
-                    available_slots.append(slot_time_str)
+            # [逻辑修改] 第一步：先看是否有 True (不管日期)
+            if slot.get('availability') is True:
+                print(f"🔎 发现可用考位 (日期未验证): {time_str}")
+                
+                # 第二步：尝试解析日期
+                try:
+                    # 解析日期格式: dd/mm/yyyy HH:MM
+                    slot_time = datetime.strptime(time_str, "%d/%m/%Y %H:%M")
+                except ValueError:
+                    print(f"   ❌ 日期格式解析错误: {time_str}")
+                    continue
 
-        # 4. 如果有考位，发送通知
+                # 第三步：检查日期范围
+                # TODO: 忽略日期范围检查，测试wechat推送
+                # if START_DATE < slot_time <= END_DATE:
+                    # print(f"   ✅ 日期符合要求 ({START_DATE.date()} - {END_DATE.date()})! 加入通知列表.")
+                available_slots.append(time_str)
+                # else:
+                    # print(f"   ⚠️ 日期不在目标范围内，忽略.")
+            
+            # 如果 availability 是 false，就不打印了，避免日志刷屏
+
+        # 5. 发送通知
         if available_slots:
-            msg = f"发现 {len(available_slots)} 个可用考位！<br>" + "<br>".join(available_slots)
-            print(msg)
+            count = len(available_slots)
+            msg = (f"🎯 <b>Roselands 锁定 {count} 个考位！</b><br><br>" + 
+                   "<br>".join(available_slots) + 
+                   "<br><br>👉 立即预约：https://driverstest.noob.place/")
+            print(f"成功筛选出 {count} 个目标考位，正在推送...")
             send_wechat_notification(msg)
         else:
-            print("当前时段无可用考位")
+            print(f"检查完成：暂无符合日期要求的可用考位")
 
     except Exception as e:
         print(f"脚本运行出错: {e}")
